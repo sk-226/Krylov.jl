@@ -1631,6 +1631,47 @@ function BicgstabWorkspace(A, b)
   BicgstabWorkspace(m, n, S)
 end
 
+mutable struct BicgstablWorkspace{T, FC, S} <: _KrylovWorkspace{T,FC,S,S}
+  m          :: Int
+  n          :: Int
+  ℓ          :: Int
+  Δx         :: S
+  x          :: S
+  R          :: Vector{S}
+  U          :: Vector{S}
+  τ          :: Vector{FC}
+  σ          :: Vector{T}
+  γ          :: Vector{FC}
+  γ′         :: Vector{FC}
+  γ″        :: Vector{FC}
+  warm_start :: Bool
+  stats      :: SimpleStats{T}
+end
+
+function BicgstablWorkspace(kc::KrylovConstructor{S, S}; ℓ::Int = 2) where {S}
+  start_allocation_time = time_ns()
+  FC = eltype(S)
+  T = real(FC)
+  m = length(kc.vm)
+  n = length(kc.vn)
+  ℓ = min(ℓ, n)
+  Δx = similar(kc.vn_empty)
+  x  = similar(kc.vn)
+  R  = S[similar(kc.vn) for i in 1 : ℓ+1]
+  U  = S[similar(kc.vn) for i in 1 : ℓ+1]
+  τ  = Vector{FC}(undef, div(ℓ * (ℓ-1), 2))
+  σ  = Vector{T}(undef, ℓ)
+  γ  = Vector{FC}(undef, ℓ)
+  γ′ = Vector{FC}(undef, ℓ)
+  γ″ = Vector{FC}(undef, ℓ)
+  warm_start = false
+  stats = SimpleStats(0, false, false, false, 0, T[], T[], T[], T[], 0.0, 0.0, "unknown")
+  workspace = BicgstablWorkspace{T, FC, S}(m, n, ℓ, Δx, x, R, U, τ, σ, γ, γ′, γ″, warm_start, stats)
+  workspace.stats.allocation_timer = start_allocation_time |> ktimer
+  return workspace
+end
+
+
 """
 Workspace for the in-place methods [`bilq!`](@ref) and [`krylov_solve!`](@ref).
 
