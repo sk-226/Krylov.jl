@@ -1,7 +1,101 @@
+# An implementation of BiCGstab(ℓ) for the solution of unsymmetric and square consistent linear system Ax = b.
+#
+# This method is described in
+#
+# G. L. G. Sleijpen and D. R. Fokkema
+# BiCGstab(ℓ) for linear equations involving unsymmetric matrices with complex spectrum.
+# Electronic Transactions on Numerical Analysis, 1, pp. 11--32, 1993.
+#
+# G. L. G. Sleijpen, H. A. van der Vorst and D. R. Fokkema
+# BiCGstab(ℓ) and other hybrid Bi-CG methods.
+# Numerical Algorithms, 7, pp. 75--109, 1994.
+#
+# Suguru Kurita, <skurita0208@gmail.com>
+# Tokyo, October 2026.
+
 export bicgstabl, bicgstabl!
 
+"""
+    (x, stats) = bicgstabl(A, b::AbstractVector{FC};
+                           ℓ::Int=2, c::AbstractVector{FC}=b,
+                           atol::T=√eps(T), rtol::T=√eps(T), itmax::Int=0,
+                           timemax::Float64=Inf, verbose::Int=0, history::Bool=false,
+                           callback=workspace->false, iostream::IO=kstdout)
+
+`T` is an `AbstractFloat` such as `Float32`, `Float64` or `BigFloat`.
+`FC` is `T` or `Complex{T}`.
+
+    (x, stats) = bicgstabl(A, b, x0::AbstractVector; kwargs...)
+
+BiCGstab(ℓ) can be warm-started from an initial guess `x0` where `kwargs` are the same keyword arguments as above.
+
+Solve the square linear system Ax = b of size n using BiCGstab(ℓ).
+BiCGstab(ℓ) requires two initial vectors `b` and `c`.
+The relation `bᴴc ≠ 0` must be satisfied and by default `c = b`.
+
+Each iteration performs ℓ steps of BiCG followed by a minimal residual step of degree ℓ,
+whereas BiCGSTAB uses a minimal residual step of degree one after each BiCG step.
+For ℓ = 1, BiCGstab(ℓ) is mathematically equivalent to BiCGSTAB.
+Larger values of ℓ can improve robustness, in particular when `A` has eigenvalues with large imaginary parts,
+for which BiCGSTAB tends to stagnate.
+Each iteration requires 2ℓ operator-vector products with `A`.
+
+BiCGstab(ℓ) stops when `itmax` iterations are reached or when `‖rₖ‖ ≤ atol + ‖r₀‖ * rtol`.
+
+#### Interface
+
+To easily switch between Krylov methods, use the generic interface [`krylov_solve`](@ref) with `method = :bicgstabl`.
+
+For an in-place variant that reuses memory across solves, see [`bicgstabl!`](@ref).
+
+#### Input arguments
+
+* `A`: a linear operator that models a matrix of dimension `n`;
+* `b`: a vector of length `n`.
+
+#### Optional argument
+
+* `x0`: a vector of length `n` that represents an initial guess of the solution `x`.
+
+#### Keyword arguments
+
+* `ℓ`: the number of BiCG steps performed in each iteration and the degree of the minimal residual polynomial. `ℓ` must be at least 1 and is capped at `n`. Typical choices are `ℓ = 2, 4, 6, 8`;
+* `c`: the second initial vector of length `n` required by the Lanczos biorthogonalization process;
+* `atol`: absolute stopping tolerance based on the residual norm;
+* `rtol`: relative stopping tolerance based on the residual norm;
+* `itmax`: the maximum number of iterations. If `itmax=0`, the default number of iterations is set to `2n`;
+* `timemax`: the time limit in seconds;
+* `verbose`: additional details can be displayed if verbose mode is enabled (verbose > 0). Information will be displayed every `verbose` iterations;
+* `history`: collect additional statistics on the run such as residual norms, or Aᴴ-residual norms;
+* `callback`: function or functor called as `callback(workspace)` that returns `true` if the Krylov method should terminate, and `false` otherwise;
+* `iostream`: stream to which output is logged.
+
+#### Output arguments
+
+* `x`: a dense vector of length `n`;
+* `stats`: statistics collected on the run in a [`SimpleStats`](@ref) structure.
+
+#### References
+
+* G. L. G. Sleijpen and D. R. Fokkema, [*BiCGstab(ℓ) for linear equations involving unsymmetric matrices with complex spectrum*](https://www.emis.de/journals/ETNA/volumes/1993-2000/vol1/abstract_vol1_pp11-32.html), Electronic Transactions on Numerical Analysis, 1, pp. 11--32, 1993.
+* G. L. G. Sleijpen, H. A. van der Vorst and D. R. Fokkema, [*BiCGstab(ℓ) and other hybrid Bi-CG methods*](https://doi.org/10.1007/BF02141261), Numerical Algorithms, 7, pp. 75--109, 1994.
+"""
 function bicgstabl end
 
+"""
+    workspace = bicgstabl!(workspace::BicgstablWorkspace, A, b; kwargs...)
+    workspace = bicgstabl!(workspace::BicgstablWorkspace, A, b, x0; kwargs...)
+
+In these calls, `kwargs` are keyword arguments of [`bicgstabl`](@ref).
+The keyword argument `ℓ` is the only exception.
+It is only supported by [`bicgstabl`](@ref) and is required to create a `BicgstablWorkspace`.
+It cannot be changed later.
+
+See [`BicgstablWorkspace`](@ref) for instructions on how to create the `workspace`.
+
+For a more generic interface, you can use [`krylov_workspace`](@ref) with `method = :bicgstabl` to allocate the workspace,
+and [`krylov_solve!`](@ref) to run the Krylov method in-place.
+"""
 function bicgstabl! end
 
 def_args_bicgstabl = (:(A                    ),

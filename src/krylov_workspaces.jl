@@ -1631,6 +1631,22 @@ function BicgstabWorkspace(A, b)
   BicgstabWorkspace(m, n, S)
 end
 
+"""
+Workspace for the in-place methods [`bicgstabl!`](@ref) and [`krylov_solve!`](@ref).
+
+The following outer constructors can be used to initialize this workspace:
+
+    workspace = BicgstablWorkspace(m, n, S; ℓ = 2)
+    workspace = BicgstablWorkspace(A, b; ℓ = 2)
+    workspace = BicgstablWorkspace(kc::KrylovConstructor{S,S}; ℓ = 2)
+
+`m` and `n` denote the dimensions of the linear operator `A` passed to the in-place methods.
+Since [`bicgstabl`](@ref) only supports square linear operators, `m` and `n` must be equal.
+`S` is the storage type of the vectors in the workspace, such as `Vector{Float64}`.
+`ℓ` is set to `n` if the value given is larger than `n`.
+
+[`KrylovConstructor`](@ref) facilitates the allocation of vectors in the workspace if `S(undef, n)` is not available.
+"""
 mutable struct BicgstablWorkspace{T, FC, S} <: _KrylovWorkspace{T,FC,S,S}
   m          :: Int
   n          :: Int
