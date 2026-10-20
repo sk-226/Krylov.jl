@@ -91,10 +91,21 @@ kwargs_workspace_bicgstabl = (:ℓ,)
     (verbose > 0) && @printf(iostream, "%5s  %7s  %8s  %8s  %5s\n", "k", "‖rₖ‖", "|αₖ|", "|ωₖ|", "timer")
     kdisplay(iter, verbose) && @printf(iostream, "%5d  %7.1e  %8.1e  %8.1e  %.2fs\n", iter, rNorm, abs(α), abs(ω), start_time |> ktimer)
 
+    if kdot(n, c, R[1]) == 0  # ⟨c, r₀⟩
+      stats.niter = 0
+      stats.solved, stats.inconsistent = false, false
+      stats.timer = start_time |> ktimer
+      stats.status = "Breakdown bᴴc = 0"
+      warm_start && kaxpy!(n, one(FC), Δx, x)
+      workspace.warm_start = false
+      return workspace
+    end
+
     # Stopping criterion.
     solved = rNorm ≤ ε
     tired = iter ≥ itmax
     breakdown = false
+    breakdown_status = "unknown"
     status = "unknown"
     user_requested_exit = false
     overtimed = false
@@ -106,6 +117,11 @@ kwargs_workspace_bicgstabl = (:ℓ,)
       # Bi-CG part.
       for j in 1 : ℓ
         ρ₁ = kdot(n, c, R[j]) # ρ₁ = (c, rⱼ)
+        if ρ₁ == 0
+          breakdown = true
+          breakdown_status = "breakdown ρ = 0"
+          break
+        end
         β = α * ρ₁ / ρ₀
         ρ₀ = ρ₁
 
@@ -116,6 +132,11 @@ kwargs_workspace_bicgstabl = (:ℓ,)
         kmul!(U[j+1], A, U[j]) # uⱼ₊₁ = A * uⱼ
 
         α = ρ₁ / kdot(n, c, U[j+1]) # α = ρ₁ / (c, uⱼ₊₁)
+        if !isfinite(α)
+          breakdown = true
+          breakdown_status = "breakdown (c, uⱼ₊₁) = 0"
+          break
+        end
 
         for i in 1 : j
           kaxpy!(n, -α, U[i+1], R[i])  # rᵢ = rᵢ - α uᵢ₊₁
@@ -123,6 +144,12 @@ kwargs_workspace_bicgstabl = (:ℓ,)
 
         kmul!(R[j+1], A, R[j])  # rⱼ₊₁ = A * rⱼ
         kaxpy!(n, α, U[1], x)   # x = x + α * u₁
+      end
+      if breakdown
+        rNorm = knorm(n, R[1])
+        history && push!(rNorms, rNorm)
+        solved = rNorm ≤ ε
+        break
       end
 
       # MR part (mod. Gram-Schmidt).
@@ -134,7 +161,18 @@ kwargs_workspace_bicgstabl = (:ℓ,)
           kaxpy!(n, -τ[pos], R[i+1], R[j+1])  # rⱼ = rⱼ - τᵢⱼ rᵢ
         end
         σ[j] = kdotr(n, R[j+1], R[j+1])
+        if σ[j] == 0
+          breakdown = true
+          breakdown_status = "breakdown σⱼ = 0"
+          break
+        end
         γ′[j] = kdot(n, R[j+1], R[1]) / σ[j]
+      end
+      if breakdown
+        rNorm = knorm(n, R[1])
+        history && push!(rNorms, rNorm)
+        solved = rNorm ≤ ε
+        break
       end
 
       γ[ℓ] = γ′[ℓ]
@@ -174,6 +212,10 @@ kwargs_workspace_bicgstabl = (:ℓ,)
       user_requested_exit = callback(workspace) :: Bool
       solved = rNorm ≤ ε
       tired = iter ≥ itmax
+      if ω == 0
+        breakdown = true
+        breakdown_status = "breakdown ω = 0"
+      end
       timer = time_ns() - start_time
       overtimed = timer > timemax_ns
       kdisplay(iter, verbose) && @printf(iostream, "%5d  %7.1e  %8.1e  %8.1e  %.2fs\n", iter, rNorm, abs(α), abs(ω), start_time |> ktimer)
@@ -182,6 +224,7 @@ kwargs_workspace_bicgstabl = (:ℓ,)
 
     # Termination status
     tired               && (status = "maximum number of iterations exceeded")
+    breakdown           && (status = breakdown_status)
     solved              && (status = "solution good enough given atol and rtol")
     user_requested_exit && (status = "user-requested exit")
     overtimed           && (status = "time limit exceeded")
