@@ -1,6 +1,6 @@
 export KrylovWorkspace, MinresWorkspace, CgWorkspace, CrWorkspace, SymmlqWorkspace, CgLanczosWorkspace,
 CgLanczosShiftWorkspace, MinresQlpWorkspace, DqgmresWorkspace, DiomWorkspace, UsymlqWorkspace,
-UsymqrWorkspace, TricgWorkspace, TrimrWorkspace, TrilqrWorkspace, CgsWorkspace, BicgstabWorkspace,
+UsymqrWorkspace, TricgWorkspace, TrimrWorkspace, TrilqrWorkspace, CgsWorkspace, BicgstabWorkspace, BicgstablWorkspace,
 BilqWorkspace, QmrWorkspace, BilqrWorkspace, CglsWorkspace, CglsLanczosShiftWorkspace, CrlsWorkspace, CgneWorkspace,
 CrmrWorkspace, LslqWorkspace, LsqrWorkspace, LsmrWorkspace, LnlqWorkspace, CraigWorkspace, CraigmrWorkspace,
 GmresWorkspace, FomWorkspace, GpmrWorkspace, UsymlqrWorkspace, FgmresWorkspace, CarWorkspace, MinaresWorkspace
@@ -1671,6 +1671,32 @@ function BicgstablWorkspace(kc::KrylovConstructor{S, S}; ℓ::Int = 2) where {S}
   return workspace
 end
 
+function BicgstablWorkspace(m::Integer, n::Integer, S::Type; ℓ::Int = 2)
+  start_allocation_time = time_ns()
+  FC = eltype(S)
+  T  = real(FC)
+  ℓ  = min(ℓ, n)
+  Δx = S(undef, 0)
+  x  = S(undef, n)
+  R  = S[S(undef, n) for i in 1 : ℓ+1]
+  U  = S[S(undef, n) for i in 1 : ℓ+1]
+  τ  = Vector{FC}(undef, div(ℓ * (ℓ-1), 2))
+  σ  = Vector{T}(undef, ℓ)
+  γ  = Vector{FC}(undef, ℓ)
+  γ′ = Vector{FC}(undef, ℓ)
+  γ″ = Vector{FC}(undef, ℓ)
+  S  = isconcretetype(S) ? S : typeof(x)
+  stats = SimpleStats(0, false, false, false, 0, T[], T[], T[], T[], 0.0, 0.0, "unknown")
+  workspace = BicgstablWorkspace{T, FC, S}(m, n, ℓ, Δx, x, R, U, τ, σ, γ, γ′, γ″, false, stats)
+  workspace.stats.allocation_timer = start_allocation_time |> ktimer
+  return workspace
+end
+
+function BicgstablWorkspace(A, b; ℓ::Int = 2)
+  m, n = size(A)
+  S = ktypeof(b)
+  BicgstablWorkspace(m, n, S; ℓ)
+end
 
 """
 Workspace for the in-place methods [`bilq!`](@ref) and [`krylov_solve!`](@ref).
