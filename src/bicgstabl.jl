@@ -40,7 +40,7 @@ kwargs_workspace_bicgstabl = (:ℓ,)
     (m == workspace.m && n == workspace.n) || error("(workspace.m, workspace.n) = ($(workspace.m), $(workspace.n)) is inconsistent with size(A) = ($m, $n)")
     m == n || error("System must be square")
     length(b) == m || error("Inconsistent problem size")
-    (verbose > 0) && @printf(iostream, "Bi-CGstab(ℓ): system of size %d\n", n)
+    (verbose > 0) && @printf(iostream, "BiCGstab(ℓ): system of size %d\n", n)
     ℓ ≥ 1 || error("ℓ must be at least 1")
 
     # Check type consistency.
