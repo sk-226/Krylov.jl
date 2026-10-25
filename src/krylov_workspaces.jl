@@ -1647,7 +1647,7 @@ Since [`bicgstabl`](@ref) only supports square linear operators, `m` and `n` mus
 
 [`KrylovConstructor`](@ref) facilitates the allocation of vectors in the workspace if `S(undef, n)` is not available.
 """
-mutable struct BicgstablWorkspace{T, FC, S} <: _KrylovWorkspace{T,FC,S,S}
+mutable struct BicgstablWorkspace{T,FC,S} <: _KrylovWorkspace{T,FC,S,S}
   m          :: Int
   n          :: Int
   ℓ          :: Int
@@ -1659,30 +1659,29 @@ mutable struct BicgstablWorkspace{T, FC, S} <: _KrylovWorkspace{T,FC,S,S}
   σ          :: Vector{T}
   γ          :: Vector{FC}
   γ′         :: Vector{FC}
-  γ″        :: Vector{FC}
+  γ″         :: Vector{FC}
   warm_start :: Bool
   stats      :: SimpleStats{T}
 end
 
-function BicgstablWorkspace(kc::KrylovConstructor{S, S}; ℓ::Int = 2) where {S}
+function BicgstablWorkspace(kc::KrylovConstructor{S,S}; ℓ::Int = 2) where S
   start_allocation_time = time_ns()
   FC = eltype(S)
-  T = real(FC)
-  m = length(kc.vm)
-  n = length(kc.vn)
-  ℓ = min(ℓ, n)
+  T  = real(FC)
+  m  = length(kc.vm)
+  n  = length(kc.vn)
+  ℓ  = min(ℓ, n)
   Δx = similar(kc.vn_empty)
   x  = similar(kc.vn)
-  R  = S[similar(kc.vn) for i in 1 : ℓ+1]
-  U  = S[similar(kc.vn) for i in 1 : ℓ+1]
+  R  = S[similar(kc.vn) for i = 1 : ℓ+1]
+  U  = S[similar(kc.vn) for i = 1 : ℓ+1]
   τ  = Vector{FC}(undef, div(ℓ * (ℓ-1), 2))
   σ  = Vector{T}(undef, ℓ)
   γ  = Vector{FC}(undef, ℓ)
   γ′ = Vector{FC}(undef, ℓ)
   γ″ = Vector{FC}(undef, ℓ)
-  warm_start = false
   stats = SimpleStats(0, false, false, false, 0, T[], T[], T[], T[], 0.0, 0.0, "unknown")
-  workspace = BicgstablWorkspace{T, FC, S}(m, n, ℓ, Δx, x, R, U, τ, σ, γ, γ′, γ″, warm_start, stats)
+  workspace = BicgstablWorkspace{T,FC,S}(m, n, ℓ, Δx, x, R, U, τ, σ, γ, γ′, γ″, false, stats)
   workspace.stats.allocation_timer = start_allocation_time |> ktimer
   return workspace
 end
@@ -1694,8 +1693,8 @@ function BicgstablWorkspace(m::Integer, n::Integer, S::Type; ℓ::Int = 2)
   ℓ  = min(ℓ, n)
   Δx = S(undef, 0)
   x  = S(undef, n)
-  R  = S[S(undef, n) for i in 1 : ℓ+1]
-  U  = S[S(undef, n) for i in 1 : ℓ+1]
+  R  = S[S(undef, n) for i = 1 : ℓ+1]
+  U  = S[S(undef, n) for i = 1 : ℓ+1]
   τ  = Vector{FC}(undef, div(ℓ * (ℓ-1), 2))
   σ  = Vector{T}(undef, ℓ)
   γ  = Vector{FC}(undef, ℓ)
@@ -1703,7 +1702,7 @@ function BicgstablWorkspace(m::Integer, n::Integer, S::Type; ℓ::Int = 2)
   γ″ = Vector{FC}(undef, ℓ)
   S  = isconcretetype(S) ? S : typeof(x)
   stats = SimpleStats(0, false, false, false, 0, T[], T[], T[], T[], 0.0, 0.0, "unknown")
-  workspace = BicgstablWorkspace{T, FC, S}(m, n, ℓ, Δx, x, R, U, τ, σ, γ, γ′, γ″, false, stats)
+  workspace = BicgstablWorkspace{T,FC,S}(m, n, ℓ, Δx, x, R, U, τ, σ, γ, γ′, γ″, false, stats)
   workspace.stats.allocation_timer = start_allocation_time |> ktimer
   return workspace
 end

@@ -206,11 +206,11 @@ kwargs_workspace_bicgstabl = (:ℓ,)
 
     while !(solved || tired || breakdown || user_requested_exit || overtimed)
       iter = iter + 1
-      ρ₀ = - ω * ρ₀
+      ρ₀ = -ω * ρ₀
 
       # Bi-CG part.
-      for j in 1 : ℓ
-        ρ₁ = kdot(n, c, R[j]) # ρ₁ = (c, rⱼ)
+      for j = 1 : ℓ
+        ρ₁ = kdot(n, c, R[j])  # ρ₁ = (c, rⱼ)
         if ρ₁ == 0
           breakdown = true
           breakdown_status = "breakdown ρ = 0"
@@ -219,20 +219,20 @@ kwargs_workspace_bicgstabl = (:ℓ,)
         β = α * ρ₁ / ρ₀
         ρ₀ = ρ₁
 
-        for i in 1 : j
+        for i = 1 : j
           kaxpby!(n, one(FC), R[i], -β, U[i])  # uᵢ = rᵢ - β uᵢ
         end
 
-        kmul!(U[j+1], A, U[j]) # uⱼ₊₁ = A * uⱼ
+        kmul!(U[j+1], A, U[j])  # uⱼ₊₁ = A * uⱼ
 
-        α = ρ₁ / kdot(n, c, U[j+1]) # α = ρ₁ / (c, uⱼ₊₁)
+        α = ρ₁ / kdot(n, c, U[j+1])  # α = ρ₁ / (c, uⱼ₊₁)
         if !isfinite(α)
           breakdown = true
           breakdown_status = "breakdown (c, uⱼ₊₁) = 0"
           break
         end
 
-        for i in 1 : j
+        for i = 1 : j
           kaxpy!(n, -α, U[i+1], R[i])  # rᵢ = rᵢ - α uᵢ₊₁
         end
 
@@ -247,9 +247,9 @@ kwargs_workspace_bicgstabl = (:ℓ,)
       end
 
       # MR part (mod. Gram-Schmidt).
-      pos = 0 # τᵢⱼ's position in the flattened array
-      for j in 1 : ℓ
-        for i in 1 : j-1
+      pos = 0  # τᵢⱼ's position in the flattened array
+      for j = 1 : ℓ
+        for i = 1 : j-1
           pos += 1
           τ[pos] = kdot(n, R[i+1], R[j+1]) / σ[i]
           kaxpy!(n, -τ[pos], R[i+1], R[j+1])  # rⱼ = rⱼ - τᵢⱼ rᵢ
@@ -273,18 +273,18 @@ kwargs_workspace_bicgstabl = (:ℓ,)
       ω = γ[ℓ]
 
       # γ = T⁻¹ γ′
-      for j in ℓ-1 : -1 : 1
+      for j = ℓ-1 : -1 : 1
         γ[j] = γ′[j]
-        for i in j+1 : ℓ
-          γ[j] = γ[j] - τ[div((i-1)*(i-2), 2) + j] * γ[i] # γⱼ -= τⱼᵢ γᵢ
+        for i = j+1 : ℓ
+          γ[j] = γ[j] - τ[div((i-1)*(i-2), 2) + j] * γ[i]  # γⱼ -= τⱼᵢ γᵢ
         end
       end
 
       # γ″ = T S γ
-      for j in 1 : ℓ-1
+      for j = 1 : ℓ-1
         γ″[j] = γ[j+1]
-        for i in j+1 : ℓ-1
-          γ″[j] = γ″[j] + τ[div((i-1)*(i-2), 2) + j] * γ[i+1] # γ″ⱼ += τⱼᵢ γᵢ₊₁
+        for i = j+1 : ℓ-1
+          γ″[j] = γ″[j] + τ[div((i-1)*(i-2), 2) + j] * γ[i+1]  # γ″ⱼ += τⱼᵢ γᵢ₊₁
         end
       end
 
@@ -292,7 +292,7 @@ kwargs_workspace_bicgstabl = (:ℓ,)
       kaxpy!(n, -γ′[ℓ], R[ℓ+1], R[1])
       kaxpy!(n, -γ[ℓ], U[ℓ+1], U[1])
 
-      for j in 1 : ℓ - 1
+      for j = 1 : ℓ-1
         kaxpy!(n, -γ[j], U[j+1], U[1])
         kaxpy!(n, γ″[j], R[j+1], x)
         kaxpy!(n, -γ′[j], R[j+1], R[1])
@@ -330,7 +330,7 @@ kwargs_workspace_bicgstabl = (:ℓ,)
     stats.niter = iter
     stats.solved = solved
     stats.inconsistent = false
-    stats.timer = ktimer(start_time)
+    stats.timer = start_time |> ktimer
     stats.status = status
 
     return workspace
