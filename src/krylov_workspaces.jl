@@ -1653,6 +1653,8 @@ mutable struct BicgstablWorkspace{T,FC,S} <: _KrylovWorkspace{T,FC,S,S}
   ℓ          :: Int
   Δx         :: S
   x          :: S
+  q          :: S
+  yz         :: S
   R          :: Vector{S}
   U          :: Vector{S}
   τ          :: Vector{FC}
@@ -1673,6 +1675,8 @@ function BicgstablWorkspace(kc::KrylovConstructor{S,S}; ℓ::Int = 2) where S
   ℓ  = min(ℓ, n)
   Δx = similar(kc.vn_empty)
   x  = similar(kc.vn)
+  q  = similar(kc.vn_empty)
+  yz = similar(kc.vn_empty)
   R  = S[similar(kc.vn) for i = 1 : ℓ+1]
   U  = S[similar(kc.vn) for i = 1 : ℓ+1]
   τ  = Vector{FC}(undef, div(ℓ * (ℓ-1), 2))
@@ -1681,7 +1685,7 @@ function BicgstablWorkspace(kc::KrylovConstructor{S,S}; ℓ::Int = 2) where S
   γ′ = Vector{FC}(undef, ℓ)
   γ″ = Vector{FC}(undef, ℓ)
   stats = SimpleStats(0, false, false, false, 0, T[], T[], T[], T[], 0.0, 0.0, "unknown")
-  workspace = BicgstablWorkspace{T,FC,S}(m, n, ℓ, Δx, x, R, U, τ, σ, γ, γ′, γ″, false, stats)
+  workspace = BicgstablWorkspace{T,FC,S}(m, n, ℓ, Δx, x, q, yz, R, U, τ, σ, γ, γ′, γ″, false, stats)
   workspace.stats.allocation_timer = start_allocation_time |> ktimer
   return workspace
 end
@@ -1693,6 +1697,8 @@ function BicgstablWorkspace(m::Integer, n::Integer, S::Type; ℓ::Int = 2)
   ℓ  = min(ℓ, n)
   Δx = S(undef, 0)
   x  = S(undef, n)
+  q  = S(undef, 0)
+  yz = S(undef, 0)
   R  = S[S(undef, n) for i = 1 : ℓ+1]
   U  = S[S(undef, n) for i = 1 : ℓ+1]
   τ  = Vector{FC}(undef, div(ℓ * (ℓ-1), 2))
@@ -1702,7 +1708,7 @@ function BicgstablWorkspace(m::Integer, n::Integer, S::Type; ℓ::Int = 2)
   γ″ = Vector{FC}(undef, ℓ)
   S  = isconcretetype(S) ? S : typeof(x)
   stats = SimpleStats(0, false, false, false, 0, T[], T[], T[], T[], 0.0, 0.0, "unknown")
-  workspace = BicgstablWorkspace{T,FC,S}(m, n, ℓ, Δx, x, R, U, τ, σ, γ, γ′, γ″, false, stats)
+  workspace = BicgstablWorkspace{T,FC,S}(m, n, ℓ, Δx, x, q, yz, R, U, τ, σ, γ, γ′, γ″, false, stats)
   workspace.stats.allocation_timer = start_allocation_time |> ktimer
   return workspace
 end

@@ -17,8 +17,9 @@ export bicgstabl, bicgstabl!
 
 """
     (x, stats) = bicgstabl(A, b::AbstractVector{FC};
-                           ℓ::Int=2, c::AbstractVector{FC}=b,
-                           atol::T=√eps(T), rtol::T=√eps(T), itmax::Int=0,
+                           ℓ::Int=2, c::AbstractVector{FC}=b, M=I, N=I,
+                           ldiv::Bool=false, atol::T=√eps(T),
+                           rtol::T=√eps(T), itmax::Int=0,
                            timemax::Float64=Inf, verbose::Int=0, history::Bool=false,
                            callback=workspace->false, iostream::IO=kstdout)
 
@@ -61,6 +62,9 @@ For an in-place variant that reuses memory across solves, see [`bicgstabl!`](@re
 
 * `ℓ`: the number of BiCG steps performed in each iteration and the degree of the minimal residual polynomial. `ℓ` must be at least 1 and is capped at `n`. Typical choices are `ℓ = 2, 4, 6, 8`;
 * `c`: the second initial vector of length `n` required by the Lanczos biorthogonalization process;
+* `M`: linear operator that models a nonsingular matrix of size `n` used for left preconditioning;
+* `N`: linear operator that models a nonsingular matrix of size `n` used for right preconditioning;
+* `ldiv`: define whether the preconditioners use `ldiv!` or `mul!`;
 * `atol`: absolute stopping tolerance based on the residual norm;
 * `rtol`: relative stopping tolerance based on the residual norm;
 * `itmax`: the maximum number of iterations. If `itmax=0`, the default number of iterations is set to `2n`;
@@ -104,6 +108,9 @@ def_args_bicgstabl = (:(A                    ),
 def_optargs_bicgstabl = (:(x0::AbstractVector),)
 
 def_kwargs_bicgstabl = (:(; c::AbstractVector{FC} = b    ),
+                        :(; M = I                        ),
+                        :(; N = I                        ),
+                        :(; ldiv::Bool = false           ),
                         :(; atol::T = √eps(T)            ),
                         :(; rtol::T = √eps(T)            ),
                         :(; itmax::Int = 0               ),
@@ -120,7 +127,7 @@ def_kwargs_workspace_bicgstabl = extract_parameters.(def_kwargs_workspace_bicgst
 
 args_bicgstabl = (:A, :b)
 optargs_bicgstabl = (:x0,)
-kwargs_bicgstabl = (:c, :atol, :rtol, :itmax, :timemax, :verbose, :history, :callback, :iostream)
+kwargs_bicgstabl = (:c, :M, :N, :ldiv, :atol, :rtol, :itmax, :timemax, :verbose, :history, :callback, :iostream)
 kwargs_workspace_bicgstabl = (:ℓ,)
 
 @eval begin
@@ -137,13 +144,19 @@ kwargs_workspace_bicgstabl = (:ℓ,)
     (verbose > 0) && @printf(iostream, "BiCGstab(ℓ): system of size %d\n", n)
     ℓ ≥ 1 || error("ℓ must be at least 1")
 
+    # Check M = Iₙ and N = Iₙ
+    MisI = (M === I)
+    NisI = (N === I)
+
     # Check type consistency.
     eltype(A) == FC || @warn "eltype(A) ≠ $FC. This could lead to errors or additional allocations in operator-vector products."
     ktypeof(b) == S || error("ktypeof(b) must be equal to $S")
     ktypeof(c) == S || error("ktypeof(c) must be equal to $S")
 
     # Set up workspace.
-    Δx, x, R, U = workspace.Δx, workspace.x, workspace.R, workspace.U
+    allocate_if(!MisI, workspace, :q , S, workspace.x)  # The length of q is n
+    allocate_if(!NisI, workspace, :yz, S, workspace.x)  # The length of yz is n
+    Δx, x, q, yz, R, U = workspace.Δx, workspace.x, workspace.q, workspace.yz, workspace.R, workspace.U
     τ, σ, γ, γ′, γ″ = workspace.τ, workspace.σ, workspace.γ, workspace.γ′, workspace.γ″
     warm_start = workspace.warm_start
 
@@ -151,12 +164,14 @@ kwargs_workspace_bicgstabl = (:ℓ,)
     rNorms = stats.residuals
     reset!(stats)
 
+    r₀ = MisI ? R[1] : q
     if warm_start
-      kmul!(R[1], A, Δx)                      # r₀ = A * Δx
-      kaxpby!(n, one(FC), b, -one(FC), R[1])  # r₀ = b - r₀
+      kmul!(r₀, A, Δx)                      # r₀ = A * Δx
+      kaxpby!(n, one(FC), b, -one(FC), r₀)  # r₀ = b - r₀
     else
-      kcopy!(n, R[1], b)  # r₀ = b
+      kcopy!(n, r₀, b)  # r₀ = b
     end
+    MisI || mulorldiv!(R[1], M, r₀, ldiv)  # r₀ = M⁻¹r₀
 
     kfill!(x, zero(FC))
     kfill!(U[1], zero(FC))
@@ -223,7 +238,15 @@ kwargs_workspace_bicgstabl = (:ℓ,)
           kaxpby!(n, one(FC), R[i], -β, U[i])  # uᵢ = rᵢ - β uᵢ
         end
 
-        kmul!(U[j+1], A, U[j])  # uⱼ₊₁ = A * uⱼ
+        # uⱼ₊₁ = M⁻¹AN⁻¹uⱼ
+        y = NisI ? U[j] : yz
+        NisI || mulorldiv!(y, N, U[j], ldiv)
+        if MisI
+          kmul!(U[j+1], A, y)
+        else
+          kmul!(q, A, y)
+          mulorldiv!(U[j+1], M, q, ldiv)
+        end
 
         α = ρ₁ / kdot(n, c, U[j+1])  # α = ρ₁ / (c, uⱼ₊₁)
         if !isfinite(α)
@@ -236,7 +259,15 @@ kwargs_workspace_bicgstabl = (:ℓ,)
           kaxpy!(n, -α, U[i+1], R[i])  # rᵢ = rᵢ - α uᵢ₊₁
         end
 
-        kmul!(R[j+1], A, R[j])  # rⱼ₊₁ = A * rⱼ
+        # rⱼ₊₁ = M⁻¹AN⁻¹rⱼ
+        z = NisI ? R[j] : yz
+        NisI || mulorldiv!(z, N, R[j], ldiv)
+        if MisI
+          kmul!(R[j+1], A, z)
+        else
+          kmul!(q, A, z)
+          mulorldiv!(R[j+1], M, q, ldiv)
+        end
         kaxpy!(n, α, U[1], x)   # x = x + α * u₁
       end
       if breakdown
@@ -322,6 +353,12 @@ kwargs_workspace_bicgstabl = (:ℓ,)
     solved              && (status = "solution good enough given atol and rtol")
     user_requested_exit && (status = "user-requested exit")
     overtimed           && (status = "time limit exceeded")
+
+    # x = N⁻¹x̂
+    if !NisI
+      mulorldiv!(yz, N, x, ldiv)
+      kcopy!(n, x, yz)
+    end
 
     warm_start && kaxpy!(n, one(FC), Δx, x)
     workspace.warm_start = false

@@ -62,6 +62,30 @@
           @test norm(x) == 0
           @test stats.status == "x is a zero-residual solution"
 
+          # Left preconditioning
+          A, b, M = square_preconditioned(FC=FC)
+          (x, stats) = bicgstabl(A, b, M=M, ℓ=min(ℓ, 2))
+          r = b - A * x
+          resid = norm(M * r) / norm(M * b)
+          @test(resid ≤ bicgstabl_tol)
+          @test(stats.solved)
+
+          # Right preconditioning
+          A, b, N = square_preconditioned(FC=FC)
+          (x, stats) = bicgstabl(A, b, N=N, ℓ=min(ℓ, 2))
+          r = b - A * x
+          resid = norm(r) / norm(b)
+          @test(resid ≤ bicgstabl_tol)
+          @test(stats.solved)
+
+          # Split preconditioning
+          A, b, M, N = two_preconditioners(500, 32)
+          (x, stats) = bicgstabl(A, b, M=M, N=N, ℓ=1)
+          r = b - A * x
+          resid = norm(M * r) / norm(M * b)
+          @test(resid ≤ bicgstabl_tol)
+          @test(stats.solved)
+
           # Test bᴴc == 0
           A, b, c = bc_breakdown(FC=FC)
           (x, stats) = bicgstabl(A, b, c=c, ℓ=ℓ)
